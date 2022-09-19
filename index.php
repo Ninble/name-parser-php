@@ -1,7 +1,7 @@
 <?php
 
 //Get your API key on https://parser.name/
-$apiKey = "1bf857dfdabefb9a33cab34be438dbc2";
+$apiKey = "";
 
 //These classes hold all functionality.
 require("src/NameParser/class.extract.php");
