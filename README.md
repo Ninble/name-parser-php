@@ -160,3 +160,52 @@ try {
     echo "Exception: ".$e->getMessage();
 }
 ```
+
+Generate random names
+---------
+This endpoint generates names by combining a random first name and a random last name for any given country code. 
+Additionally, the endpoint also generates a fictional email address and strong password making it a great solution to create development databases.
+```php
+require("src/NameParser/class.generate.php");
+
+try {
+    $names = new clsGenerateNames($apiKey);
+    if ($names->generate(5)){
+        foreach($names->list() as $name){
+            print_r($name.PHP_EOL); //Returns five random names.
+            $details = $names->details($name); //Returns all details we have on the generated name.
+        }
+    }
+    
+} catch (exception $e) {
+    echo "Exception: ".$e->getMessage();
+}
+```
+
+Extract names from text
+---------
+This endpoint extracts complete names from unstructured text very fast.
+By using a combination of millions of first names and millions of last names we can identify and extract complete names with an extremely high precision and accuracy.
+
+```php
+require("src/NameParser/class.extract.php");
+
+try {
+    $names = new clsExtractNames($apiKey);
+    if ($names->extract("Veteran quarterback Philip Rivers moved ahead of Matteo Federica on the NFL's all-time passing list.")) {
+        foreach($names->list() as $name){
+            print_r($name.PHP_EOL); //Returns "Philip Rivers" and "Matteo Federica".
+            $details = $names->details($name); //Returns all data we have on the extracted name.
+        }
+    }
+    
+} catch (exception $e) {
+    echo "Exception: ".$e->getMessage();
+}
+```
+
+Do you have any questions about Name Parser?
+Do you have feature requests or suggestions to improve our service?
+Please reach out using our contact page.
+
+<https://parser.name/contact/>
