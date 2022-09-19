@@ -37,14 +37,13 @@ If you use the name parser on a contact or registration form you can pass the IP
 require("src/NameParser/class.parse.php");
 
 try {
-
     $name = new clsParseName('Your-API-key-here');
     if ($name->fromCompleteName("Linus Benedict Torvalds")) {
-        echo($name->firstname());   //Returns "Linus"
+        echo($name->firstname()); //Returns "Linus"
     }
 
 } catch (exception $e) {
-    echo "Ecexption: ".$e->getMessage();
+    echo "Exception: ".$e->getMessage();
 }
 ```
 ```php
@@ -69,16 +68,15 @@ In this example you'll get the first, middle and lastname.
 require("src/NameParser/class.parse.php");
 
 try {
-
     $name = new clsParseName('Your-API-key-here');
     if ($name->fromCompleteName("Linus Benedict Torvalds")) {
-        echo($name->firstname());   //Returns "Linus"
-        echo($name->middlename());   //Returns "Benedict"
-        echo($name->lastname());    //Returns "Torvalds"
+        echo($name->firstname()); //Returns "Linus"
+        echo($name->middlename()); //Returns "Benedict"
+        echo($name->lastname()); //Returns "Torvalds"
     }
 
 } catch (exception $e) {
-    echo "Ecexption: ".$e->getMessage();
+    echo "Exception: ".$e->getMessage();
 }
 ```
 
@@ -91,15 +89,14 @@ We received this data from governments and statistical agencies.
 require("src/NameParser/class.parse.php");
 
 try {
-
     $name = new clsParseName('Your-API-key-here');
     if ($name->fromCompleteName("Linus Benedict Torvalds")) {
-        echo($name->gender());          //Returns "m"
+        echo($name->gender()); //Returns "m"
         echo($name->genderFormatted()); //Returns "male"
     }
 
 } catch (exception $e) {
-    echo "Ecexption: ".$e->getMessage();
+    echo "Exception: ".$e->getMessage();
 }
 ```
 
@@ -112,16 +109,15 @@ The following example will parse the name "Linus Benedict Torvalds" and return t
 require("src/NameParser/class.parse.php");
 
 try {
-
     $name = new clsParseName('Your-API-key-here');
     if ($name->fromCompleteName("Linus Benedict Torvalds")) {
-        echo($name->countryCode());       //Returns "SE"
-        echo($name->country());           //Returns "Sweden"
-        echo($name->currency());          //Returns "SEK"
+        echo($name->countryCode()); //Returns "SE"
+        echo($name->country()); //Returns "Sweden"
+        echo($name->currency()); //Returns "SEK"
     }
 
 } catch (exception $e) {
-    echo "Ecexption: ".$e->getMessage();
+    echo "Exception: ".$e->getMessage();
 }
 ```
 
@@ -134,15 +130,33 @@ We also return if the email address is a personal or a business email address.
 require("src/NameParser/class.parse.php");
 
 try {
-
     $name = new clsParseName('Your-API-key-here');
     if ($name->fromEmailAddress("linus.torvalds@protonmail.org")) {
-        echo($name->salutation());   //Returns "Mr"
-        echo($name->firstname());    //Returns "Linus"
-        echo($name->lastname());     //Returns "Torvalds"
+        echo($name->salutation()); //Returns "Mr"
+        echo($name->firstname()); //Returns "Linus"
+        echo($name->lastname()); //Returns "Torvalds"
     }
 
 } catch (exception $e) {
-    echo "Ecexption: ".$e->getMessage();
+    echo "Exception: ".$e->getMessage();
+}
+```
+
+Validate a complete name
+---------
+Our database holds millions of first names and last names. 
+Improve the quality of your database. 
+Check if a name exists, is not made up or misspelled.
+```php
+require("src/NameParser/class.parse.php");
+
+try {
+    $name = new clsParseName('Your-API-key-here');
+    if ($name->validate("random_mnbas")) {
+        var_dump($name->valid()); //Returns "bool(false)".
+    }
+    
+} catch (exception $e) {
+    echo "Exception: ".$e->getMessage();
 }
 ```

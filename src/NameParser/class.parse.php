@@ -13,6 +13,7 @@
 class clsParseName {
 
     private $apiKey = "";
+    private $use_strict_validation = false;
     private $response = [];
     private $salutation = "";
     private $firstname = "";
@@ -23,6 +24,12 @@ class clsParseName {
     private $country_code = "";
     private $country = "";
     private $currency = "";
+    private $email = "";
+    private $password = "";
+    private $valid = false;
+
+    private $remaining_hour = 250; //Default rate limit
+    private $remaining_day = 250; //Default rate limit
 
     public function __construct(string $apiKey)
     {
@@ -82,8 +89,33 @@ class clsParseName {
         return $this->currency;
     }
 
+    public function email() : string
+    {
+        return $this->email;
+    }
+
+    public function password() : string
+    {
+        return $this->password;
+    }
+
+    public function valid() : bool
+    {
+        return $this->valid;
+    }
+
+    public function remainingHour() : integer
+    {
+        return $this->remaining_hour;
+    }
+
+    public function remainingDay() : integer
+    {
+        return $this->remaining_day;
+    }
+
     //This endpoint parses a complete name and returns the first name, middle names and last name.
-    public function fromCompleteName(string $name, string $refine = "")
+    public function fromCompleteName(string $name, string $refine = "") : bool
     {
         //Create the URL with parameters depending on the input.
         $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&name=".urlencode($name);
@@ -97,40 +129,11 @@ class clsParseName {
             }
         }
 
-        //Setup cUrl.
-        $curl = curl_init();
-        curl_setopt_array($curl, array(
-            CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_ENCODING => '',
-            CURLOPT_MAXREDIRS => 1,
-            CURLOPT_TIMEOUT => 0,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-            CURLOPT_CUSTOMREQUEST => 'GET',
-        ));
-
-        $response = json_decode(curl_exec($curl), true);
-        $status_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-
-        curl_close($curl);
-
-        //Process the response if possible.
-        if ($status_code == 200) {
-            if(isset($response['data'][0])) {
-                $this->_processResponse($response['data'][0]);
-            } else {
-                throw new InvalidArgumentException("Response is missing data.");
-            }
-        } else {
-            throw new InvalidArgumentException("API returned status code ".$status_code.".");
-        }
-
-        return true;
+        return $this->_cUrl($url);
     }
 
     //This endpoint parses an email address and returns the first name, middle names and last name.
-    public function fromEmailAddress(string $email, string $refine = "")
+    public function fromEmailAddress(string $email, string $refine = "") : bool
     {
         //Create the URL with parameters depending on the input.
         $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&email=".urlencode($email);
@@ -144,10 +147,39 @@ class clsParseName {
             }
         }
 
-        //Setup cUrl.
+        return $this->_cUrl($url);
+    }
+
+    //This endpoint parses a name and validates the name as well.
+    public function validate(string $name, string $refine = "", bool $use_strict_validation = false) : bool
+    {
+        //Strict validation = false : The first name must exist, the lastname could be possible and the complete name should not be listed in our database with famous, fictional and humorous names.
+        //Strict validation = true  : The first name and last name must exist (validated = true) and the complete name should not be listed in our database with famous, fictional and humorous names.
+        $this->use_strict_validation = $use_strict_validation;
+
+        //Create the URL with parameters depending on the input.
+        $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&validate=true&name=".urlencode($name);
+        if($refine != ""){
+            if($this->_validateCountryCode($refine)){
+                $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&validate=true&name=".urlencode($name)."&country_code=".$refine;
+            } elseif (filter_var($refine, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)){
+                $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&validate=true&name=".urlencode($name)."&ip=".$refine;
+            } else {
+                throw new InvalidArgumentException("Invalid refine parameter. Refine parameter should be country code or IPv4 address.");
+            }
+        }
+
+        return $this->_cUrl($url);
+    }
+
+    //All public functions create a URL and use this curl function to execute the request.
+    private function _cUrl(string $url) : bool {
+
+        //Set up the cUrl request.
         $curl = curl_init();
         curl_setopt_array($curl, array(
             CURLOPT_URL => $url,
+            CURLOPT_HEADER => true,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_ENCODING => '',
             CURLOPT_MAXREDIRS => 1,
@@ -157,15 +189,26 @@ class clsParseName {
             CURLOPT_CUSTOMREQUEST => 'GET',
         ));
 
-        $response = json_decode(curl_exec($curl), true);
-        $status_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        //Execute cUrl request.
+        $response = curl_exec($curl);
 
+        //Retrieve status code, header and body from response object.
+        $status_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $header_size = curl_getinfo($curl, CURLINFO_HEADER_SIZE);
+        $header = substr($response, 0, $header_size);
+        $body = substr($response, $header_size);
+        $json = json_decode($body, true);
+
+        //Close connection.
         curl_close($curl);
+
+        //Heading contains information about rate limits.
+        $this->_processHeader($header);
 
         //Process the response if possible.
         if ($status_code == 200) {
-            if(isset($response['data'][0])) {
-                $this->_processResponse($response['data'][0]);
+            if(isset($json['data'][0])) {
+                $this->_processResponse($json['data'][0]);
             } else {
                 throw new InvalidArgumentException("Response is missing data.");
             }
@@ -176,7 +219,22 @@ class clsParseName {
         return true;
     }
 
-    private function _processResponse(array $response) : void
+    //The headers of the API response contain rate limit information.
+    private function _processHeader(string $header) : void
+    {
+        $rows = explode(PHP_EOL, $header);
+        foreach($rows as $row){
+            if(stripos($row, "X-Requests-Remaining-Hour")>-1){
+                $this->remaining_hour = (int) substr($row, stripos($row, ":") + 2);
+            }
+            if(stripos($row, "X-Requests-Remaining-Day")>-1){
+                $this->remaining_day = (int) substr($row, stripos($row, ":") + 2);
+            }
+        }
+    }
+
+    //Retrieve variables from API response and make it available in the class.
+    private function _processResponse(array $response, bool $validate=false) : void
     {
         if(isset($response['salutation']['salutation'])) {
             $this->salutation = $response['salutation']['salutation'];
@@ -205,10 +263,28 @@ class clsParseName {
         if(isset($response['country']['currency'])) {
             $this->currency = $response['country']['currency'];
         }
+        if(isset($response['email']['address'])) {
+            $this->email = $response['email']['address'];
+        }
+        if(isset($response['password'])) {
+            $this->password = $response['password'];
+        }
+
+        //If response contains validation section then it was used.
+        if(isset($response['validation'])){
+            if($this->use_strict_validation == true){
+                $this->valid = (bool) $response['validation']['pass_strict'];
+            } else {
+                $this->valid = (bool) $response['validation']['pass_loose'];
+            }
+        } else {
+            $this->valid = true;
+        }
 
         $this->response = $response;
     }
 
+    //Check if a given country code is valid.
     private function _validateCountryCode(string $country_code) : bool
     {
         $country_codes = array(
@@ -495,5 +571,4 @@ class clsParseName {
     }
 
 }
-
 ?>
