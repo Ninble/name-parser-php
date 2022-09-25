@@ -1,4 +1,4 @@
-# Name Parser PHP
+# Name Parser for PHP
 Your name contains a lot of information. 
 It tells if you're male or female and reveals your nationality. 
 Our service turns unstructured names into actionable information.
