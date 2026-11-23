@@ -4,7 +4,6 @@
 $apiKey = "";
 
 //These classes hold all functionality.
-require("src/NameParser/class.extract.php");
 require("src/NameParser/class.generate.php");
 require("src/NameParser/class.parse.php");
 
@@ -38,17 +37,6 @@ try {
         foreach($names->list() as $name){
             print_r($name.PHP_EOL); //Returns five random names.
             $details = $names->details($name); //Returns all details we have on the generated name.
-        }
-    }
-
-    //Initialize the class that extracts names.
-    $names = new clsExtractNames($apiKey);
-
-    //Extract names from text.
-    if ($names->extract("Veteran quarterback Philip Rivers moved ahead of Matteo Federica on the NFL's all-time passing list.")) {
-        foreach($names->list() as $name){
-            print_r($name.PHP_EOL); //Returns "Philip Rivers" and "Matteo Federica".
-            $details = $names->details($name); //Returns all data we have on the extracted name.
         }
     }
 

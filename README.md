@@ -182,28 +182,6 @@ try {
 }
 ```
 
-Extract names from text
----------
-This endpoint extracts complete names from unstructured text very fast.
-By using a combination of millions of first names and millions of last names we can identify and extract complete names with an extremely high precision and accuracy.
-
-```php
-require("src/NameParser/class.extract.php");
-
-try {
-    $names = new clsExtractNames($apiKey);
-    if ($names->extract("Veteran quarterback Philip Rivers moved ahead of Matteo Federica on the NFL's all-time passing list.")) {
-        foreach($names->list() as $name){
-            print_r($name.PHP_EOL); //Returns "Philip Rivers" and "Matteo Federica".
-            $details = $names->details($name); //Returns all data we have on the extracted name.
-        }
-    }
-    
-} catch (exception $e) {
-    echo "Exception: ".$e->getMessage();
-}
-```
-
 Do you have any questions about Name Parser?
 Do you have feature requests or suggestions to improve our service?
 Please reach out using our contact page.
