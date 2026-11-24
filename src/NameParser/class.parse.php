@@ -352,7 +352,9 @@ class clsParseName {
         }
         if(isset($response['titles']) && is_array($response['titles'])) {
             foreach ($response['titles'] as $title) {
-                if (isset($title['abbriviation'])) {
+                if (isset($title['abbreviation']) && $title['abbreviation'] !== '') {
+                    $this->titles[] = (string)$title['abbreviation'];
+                } elseif (isset($title['abbriviation']) && $title['abbriviation'] !== '') {
                     $this->titles[] = (string)$title['abbriviation'];
                 }
             }
