@@ -7,29 +7,43 @@
  * This class contains all functionality of the "parse" endpoint which can be found on:
  * https://parser.name/api/parse-name/
  *
+ * Version 2.0 (23 November 2026): letter salutation in five languages, titles, suffix, middle names, name area, the
+ * phone hint and IPv6 addresses. password() is kept for older code but always returns "" (the API no longer returns
+ * a password).
+ *
  * Requires at least PHP 7.1 to run.
  */
 
 class clsParseName {
 
     private $apiKey = "";
+    private $language = "";
+    private $phone = "";
     private $use_strict_validation = false;
-    private $response = [];
+    private $response = array();
     private $salutation = "";
+    private $letter = "";
+    private $letter_language = "";
+    private $titles = array();
     private $firstname = "";
+    private $middlenames = array();
     private $nickname = "";
     private $lastname = "";
+    private $suffix = "";
     private $gender = "";
     private $gender_formatted = "";
     private $country_code = "";
     private $country = "";
+    private $country_certainty = 0;
+    private $name_area = "";
+    private $name_area_certainty = 0;
     private $currency = "";
     private $email = "";
-    private $password = "";
     private $valid = false;
 
     private $remaining_hour = 250; //Default rate limit
     private $remaining_day = 250; //Default rate limit
+    private $remaining_month = 0;
 
     public function __construct(string $apiKey)
     {
@@ -37,6 +51,22 @@ class clsParseName {
             throw new InvalidArgumentException("Missing API key or API key is invalid.");
         }
         $this->apiKey = $apiKey;
+    }
+
+    //The language of the letter salutation: en, nl, de, fr or es; "" lets the country of the name decide.
+    public function setLanguage(string $language) : void
+    {
+        $language = strtolower(trim($language));
+        if ($language != "" && in_array($language, array("en", "nl", "de", "fr", "es")) == false) {
+            throw new InvalidArgumentException("The language must be one of en, nl, de, fr or es.");
+        }
+        $this->language = $language;
+    }
+
+    //A phone number in international form (+61 2 9374 4000) as a hint for the country of the name.
+    public function setPhone(string $phone) : void
+    {
+        $this->phone = trim($phone);
     }
 
     public function response() : array
@@ -49,9 +79,31 @@ class clsParseName {
         return $this->salutation;
     }
 
+    //The opening line of a formal letter, such as "Dear Mr. Smith" or "Geachte heer Jansen".
+    public function letter() : string
+    {
+        return $this->letter;
+    }
+
+    public function letterLanguage() : string
+    {
+        return $this->letter_language;
+    }
+
+    //Every title in the name, such as array("Prof.", "Dr.").
+    public function titles() : array
+    {
+        return $this->titles;
+    }
+
     public function firstname() : string
     {
         return $this->firstname;
+    }
+
+    public function middlenames() : array
+    {
+        return $this->middlenames;
     }
 
     public function nickname() : string
@@ -62,6 +114,12 @@ class clsParseName {
     public function lastname() : string
     {
         return $this->lastname;
+    }
+
+    //Jr., Sr. or a Roman numeral such as III.
+    public function suffix() : string
+    {
+        return $this->suffix;
     }
 
     public function gender() : string
@@ -84,6 +142,22 @@ class clsParseName {
         return $this->country;
     }
 
+    public function countryCertainty() : int
+    {
+        return $this->country_certainty;
+    }
+
+    //The group of countries that share their names through a language, such as "English" or "Spanish".
+    public function nameArea() : string
+    {
+        return $this->name_area;
+    }
+
+    public function nameAreaCertainty() : int
+    {
+        return $this->name_area_certainty;
+    }
+
     public function currency() : string
     {
         return $this->currency;
@@ -94,9 +168,10 @@ class clsParseName {
         return $this->email;
     }
 
+    //Kept for older code: the API no longer returns a password.
     public function password() : string
     {
-        return $this->password;
+        return "";
     }
 
     public function valid() : bool
@@ -104,50 +179,32 @@ class clsParseName {
         return $this->valid;
     }
 
-    public function remainingHour() : integer
+    public function remainingHour() : int
     {
         return $this->remaining_hour;
     }
 
-    public function remainingDay() : integer
+    public function remainingDay() : int
     {
         return $this->remaining_day;
     }
 
+    public function remainingMonth() : int
+    {
+        return $this->remaining_month;
+    }
+
     //This endpoint parses a complete name and returns the first name, middle names and last name.
+    //Refine is a country code (US) or an IP address (IPv4 or IPv6) of the person.
     public function fromCompleteName(string $name, string $refine = "") : bool
     {
-        //Create the URL with parameters depending on the input.
-        $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&name=".urlencode($name);
-        if($refine != ""){
-            if($this->_validateCountryCode($refine)){
-                $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&name=".urlencode($name)."&country_code=".$refine;
-            } elseif (filter_var($refine, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)){
-                $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&name=".urlencode($name)."&ip=".$refine;
-            } else {
-                throw new InvalidArgumentException("Invalid refine parameter. Refine parameter should be country code or IPv4 address.");
-            }
-        }
-
-        return $this->_cUrl($url);
+        return $this->_cUrl($this->_buildUrl(array("name" => $name), $refine));
     }
 
     //This endpoint parses an email address and returns the first name, middle names and last name.
     public function fromEmailAddress(string $email, string $refine = "") : bool
     {
-        //Create the URL with parameters depending on the input.
-        $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&email=".urlencode($email);
-        if($refine != ""){
-            if($this->_validateCountryCode($refine)){
-                $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&email=".urlencode($email)."&country_code=".$refine;
-            } elseif (filter_var($refine, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)){
-                $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&email=".urlencode($email)."&ip=".$refine;
-            } else {
-                throw new InvalidArgumentException("Invalid refine parameter. Refine parameter should be country code or IPv4 address.");
-            }
-        }
-
-        return $this->_cUrl($url);
+        return $this->_cUrl($this->_buildUrl(array("email" => $email), $refine));
     }
 
     //This endpoint parses a name and validates the name as well.
@@ -157,23 +214,35 @@ class clsParseName {
         //Strict validation = true  : The first name and last name must exist (validated = true) and the complete name should not be listed in our database with famous, fictional and humorous names.
         $this->use_strict_validation = $use_strict_validation;
 
-        //Create the URL with parameters depending on the input.
-        $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&validate=true&name=".urlencode($name);
-        if($refine != ""){
-            if($this->_validateCountryCode($refine)){
-                $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&validate=true&name=".urlencode($name)."&country_code=".$refine;
-            } elseif (filter_var($refine, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)){
-                $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=parse&validate=true&name=".urlencode($name)."&ip=".$refine;
+        return $this->_cUrl($this->_buildUrl(array("validate" => "true", "name" => $name), $refine), true);
+    }
+
+    //The request URL with the parameters, the refine value, the language and the phone number.
+    private function _buildUrl(array $parameters, string $refine) : string
+    {
+        $parameters = array_merge(array("api_key" => $this->apiKey, "endpoint" => "parse"), $parameters);
+        if ($refine != "") {
+            if ($this->_validateCountryCode($refine) == true) {
+                $parameters['country_code'] = $refine;
+            } elseif (filter_var($refine, FILTER_VALIDATE_IP) !== false) {
+                $parameters['ip'] = $refine;
             } else {
-                throw new InvalidArgumentException("Invalid refine parameter. Refine parameter should be country code or IPv4 address.");
+                throw new InvalidArgumentException("Invalid refine parameter. Refine parameter should be a country code or an IP address.");
             }
         }
-
-        return $this->_cUrl($url);
+        if ($this->language != "") {
+            $parameters['language'] = $this->language;
+        }
+        if ($this->phone != "") {
+            $parameters['phone'] = $this->phone;
+        }
+        return "https://api.parser.name/?" . http_build_query($parameters);
     }
 
     //All public functions create a URL and use this curl function to execute the request.
-    private function _cUrl(string $url) : bool {
+    //With $validating, a name the API cannot find or does not accept (status 404 or 400) is not valid instead of an
+    //exception, so validate("random_mnbas") gives valid() false.
+    private function _cUrl(string $url, bool $validating = false) : bool {
 
         //Set up the cUrl request.
         $curl = curl_init();
@@ -183,7 +252,7 @@ class clsParseName {
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_ENCODING => '',
             CURLOPT_MAXREDIRS => 1,
-            CURLOPT_TIMEOUT => 0,
+            CURLOPT_TIMEOUT => 30,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST => 'GET',
@@ -191,6 +260,10 @@ class clsParseName {
 
         //Execute cUrl request.
         $response = curl_exec($curl);
+        if ($response === false) {
+            $message = curl_error($curl);
+            throw new RuntimeException("The request to the API failed: " . $message);
+        }
 
         //Retrieve status code, header and body from response object.
         $status_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
@@ -199,8 +272,10 @@ class clsParseName {
         $body = substr($response, $header_size);
         $json = json_decode($body, true);
 
-        //Close connection.
-        curl_close($curl);
+        //Close connection (only needed before PHP 8, deprecated since PHP 8.5).
+        if (PHP_VERSION_ID < 80000) {
+            curl_close($curl);
+        }
 
         //Heading contains information about rate limits.
         $this->_processHeader($header);
@@ -212,8 +287,15 @@ class clsParseName {
             } else {
                 throw new InvalidArgumentException("Response is missing data.");
             }
+        } elseif ($validating == true && ($status_code == 400 || $status_code == 404)) {
+            $this->_processResponse(array());
+            $this->valid = false;
         } else {
-            throw new InvalidArgumentException("API returned status code ".$status_code.".");
+            $message = "API returned status code " . $status_code . ".";
+            if (isset($json['error']) == true && $json['error'] != "") {
+                $message = $message . " " . $json['error'];
+            }
+            throw new InvalidArgumentException($message);
         }
 
         return true;
@@ -222,52 +304,104 @@ class clsParseName {
     //The headers of the API response contain rate limit information.
     private function _processHeader(string $header) : void
     {
-        $rows = explode(PHP_EOL, $header);
+        $rows = explode("\n", $header);
         foreach($rows as $row){
-            if(stripos($row, "X-Requests-Remaining-Hour")>-1){
-                $this->remaining_hour = (int) substr($row, stripos($row, ":") + 2);
+            if(stripos($row, "X-Requests-Remaining-Hour:") === 0){
+                $this->remaining_hour = (int) trim(substr($row, stripos($row, ":") + 1));
             }
-            if(stripos($row, "X-Requests-Remaining-Day")>-1){
-                $this->remaining_day = (int) substr($row, stripos($row, ":") + 2);
+            if(stripos($row, "X-Requests-Remaining-Day:") === 0){
+                $this->remaining_day = (int) trim(substr($row, stripos($row, ":") + 1));
+            }
+            if(stripos($row, "X-Requests-Remaining-Month:") === 0){
+                $this->remaining_month = (int) trim(substr($row, stripos($row, ":") + 1));
             }
         }
     }
 
-    //Retrieve variables from API response and make it available in the class.
-    private function _processResponse(array $response, bool $validate=false) : void
+    //Retrieve variables from API response and make it available in the class. Every value is reset first, so a
+    //second request never keeps a value of the first.
+    private function _processResponse(array $response) : void
     {
+        $this->salutation = "";
+        $this->letter = "";
+        $this->letter_language = "";
+        $this->titles = array();
+        $this->firstname = "";
+        $this->middlenames = array();
+        $this->nickname = "";
+        $this->lastname = "";
+        $this->suffix = "";
+        $this->gender = "";
+        $this->gender_formatted = "";
+        $this->country_code = "";
+        $this->country = "";
+        $this->country_certainty = 0;
+        $this->name_area = "";
+        $this->name_area_certainty = 0;
+        $this->currency = "";
+        $this->email = "";
+
         if(isset($response['salutation']['salutation'])) {
-            $this->salutation = $response['salutation']['salutation'];
+            $this->salutation = (string)$response['salutation']['salutation'];
+        }
+        if(isset($response['salutation']['letter'])) {
+            $this->letter = (string)$response['salutation']['letter'];
+        }
+        if(isset($response['salutation']['letter_language'])) {
+            $this->letter_language = (string)$response['salutation']['letter_language'];
+        }
+        if(isset($response['titles']) && is_array($response['titles'])) {
+            foreach ($response['titles'] as $title) {
+                if (isset($title['abbriviation'])) {
+                    $this->titles[] = (string)$title['abbriviation'];
+                }
+            }
         }
         if(isset($response['name']['firstname']['name'])) {
-            $this->firstname = $response['name']['firstname']['name'];
+            $this->firstname = (string)$response['name']['firstname']['name'];
         }
-        if(isset($response['name']['nickname']['name'])) {
-            $this->nickname = $response['name']['nickname']['name'];
+        if(isset($response['name']['middlenames']) && is_array($response['name']['middlenames'])) {
+            foreach ($response['name']['middlenames'] as $middlename) {
+                if (isset($middlename['name'])) {
+                    $this->middlenames[] = (string)$middlename['name'];
+                }
+            }
+        }
+        if(isset($response['name']['nickname'])) {
+            $this->nickname = (string)$response['name']['nickname'];
         }
         if(isset($response['name']['lastname']['name'])) {
-            $this->lastname = $response['name']['lastname']['name'];
+            $this->lastname = (string)$response['name']['lastname']['name'];
+        }
+        if(isset($response['name']['suffix'])) {
+            $this->suffix = (string)$response['name']['suffix'];
         }
         if(isset($response['name']['firstname']['gender'])) {
-            $this->gender = $response['name']['firstname']['gender'];
+            $this->gender = (string)$response['name']['firstname']['gender'];
         }
         if(isset($response['name']['firstname']['gender_formatted'])) {
-            $this->gender_formatted = $response['name']['firstname']['gender_formatted'];
+            $this->gender_formatted = (string)$response['name']['firstname']['gender_formatted'];
         }
         if(isset($response['country']['country_code'])) {
-            $this->country_code = $response['country']['country_code'];
+            $this->country_code = (string)$response['country']['country_code'];
         }
-        if(isset($response['country']['country_code'])) {
-            $this->country = $response['country']['name'];
+        if(isset($response['country']['name'])) {
+            $this->country = (string)$response['country']['name'];
+        }
+        if(isset($response['country']['country_certainty'])) {
+            $this->country_certainty = (int)$response['country']['country_certainty'];
+        }
+        if(isset($response['country']['name_area'])) {
+            $this->name_area = (string)$response['country']['name_area'];
+        }
+        if(isset($response['country']['name_area_certainty'])) {
+            $this->name_area_certainty = (int)$response['country']['name_area_certainty'];
         }
         if(isset($response['country']['currency'])) {
-            $this->currency = $response['country']['currency'];
+            $this->currency = (string)$response['country']['currency'];
         }
         if(isset($response['email']['address'])) {
-            $this->email = $response['email']['address'];
-        }
-        if(isset($response['password'])) {
-            $this->password = $response['password'];
+            $this->email = (string)$response['email']['address'];
         }
 
         //If response contains validation section then it was used.

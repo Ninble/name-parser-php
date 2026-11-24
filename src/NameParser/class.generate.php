@@ -2,10 +2,12 @@
 
 /* clsGenerateNames
  *
- * Parse a name into useful components.
+ * Generate random names with a fictional email address.
  * This class is meant to integrate the Name Parser API into your PHP project.
  * This class contains all functionality of the "generate" endpoint which can be found on:
  * https://parser.name/api/generate-random-name/
+ *
+ * Version 2.0 (23 November 2026): the ip parameter, int return types, a fresh list for every request.
  *
  * Requires at least PHP 7.1 to run.
  */
@@ -13,8 +15,8 @@
 class clsGenerateNames {
 
     private $apiKey = "";
-    private $response = [];
-    private $list = [];
+    private $response = array();
+    private $list = array();
 
     private $remaining_hour = 250; //Default rate limit
     private $remaining_day = 250; //Default rate limit
@@ -42,30 +44,33 @@ class clsGenerateNames {
         return $this->response;
     }
 
-    public function remainingHour() : integer
+    public function remainingHour() : int
     {
         return $this->remaining_hour;
     }
 
-    public function remainingDay() : integer
+    public function remainingDay() : int
     {
         return $this->remaining_day;
     }
 
-    //This endpoint can generate random names for any given gender and country.
-    public function generate(int $results=1, string $gender="", string $country_code = "") : bool
+    //This endpoint can generate random names for any given gender and country. Without a country code the country of
+    //an IP address (IPv4 or IPv6) can be used.
+    public function generate(int $results=1, string $gender="", string $country_code = "", string $ip = "") : bool
     {
 
         //Create the URL with parameters depending on the input.
-        $url = "https://api.parser.name/?api_key=" . $this->apiKey . "&endpoint=generate&results=".urlencode($results);
+        $parameters = array("api_key" => $this->apiKey, "endpoint" => "generate", "results" => $results);
         if(strtolower($gender) == "m" || strtolower($gender) == "f"){
-            $url = $url."&gender=".urlencode($gender);
+            $parameters['gender'] = strtolower($gender);
         }
         if($country_code != "" && $this->_validateCountryCode($country_code) == true){
-            $url = $url."&country_code=".urlencode($country_code);
+            $parameters['country_code'] = $country_code;
+        } elseif ($ip != "" && filter_var($ip, FILTER_VALIDATE_IP) !== false) {
+            $parameters['ip'] = $ip;
         }
 
-        return $this->_cUrl($url);
+        return $this->_cUrl("https://api.parser.name/?" . http_build_query($parameters));
     }
 
     //All public functions create a URL and use this curl function to execute the request.
@@ -79,7 +84,7 @@ class clsGenerateNames {
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_ENCODING => '',
             CURLOPT_MAXREDIRS => 1,
-            CURLOPT_TIMEOUT => 0,
+            CURLOPT_TIMEOUT => 30,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
             CURLOPT_CUSTOMREQUEST => 'GET',
@@ -95,8 +100,10 @@ class clsGenerateNames {
         $body = substr($response, $header_size);
         $json = json_decode($body, true);
 
-        //Close connection.
-        curl_close($curl);
+        //Close connection (only needed before PHP 8, deprecated since PHP 8.5).
+        if (PHP_VERSION_ID < 80000) {
+            curl_close($curl);
+        }
 
         //Heading contains information about rate limits.
         $this->_processHeader($header);
@@ -109,7 +116,11 @@ class clsGenerateNames {
                 throw new InvalidArgumentException("Response is missing data.");
             }
         } else {
-            throw new InvalidArgumentException("API returned status code ".$status_code.".");
+            $message = "API returned status code " . $status_code . ".";
+            if (isset($json['error']) == true && $json['error'] != "") {
+                $message = $message . " " . $json['error'];
+            }
+            throw new InvalidArgumentException($message);
         }
 
         return true;
@@ -118,6 +129,8 @@ class clsGenerateNames {
     //Retrieve variables from API response and make it available in the class.
     private function _processResponse(array $response) : void
     {
+        $this->list = array();
+        $this->response = array();
         foreach($response as $object){
             $name = $object['name']['firstname']['name']." ".$object['name']['lastname']['name'];
             $this->list[] = $name;
@@ -128,13 +141,13 @@ class clsGenerateNames {
     //The headers of the API response contain rate limit information.
     private function _processHeader(string $header) : void
     {
-        $rows = explode(PHP_EOL, $header);
+        $rows = explode("\n", $header);
         foreach($rows as $row){
-            if(stripos($row, "X-Requests-Remaining-Hour")>-1){
-                $this->remaining_hour = (int) substr($row, stripos($row, ":") + 2);
+            if(stripos($row, "X-Requests-Remaining-Hour:") === 0){
+                $this->remaining_hour = (int) trim(substr($row, stripos($row, ":") + 1));
             }
-            if(stripos($row, "X-Requests-Remaining-Day")>-1){
-                $this->remaining_day = (int) substr($row, stripos($row, ":") + 2);
+            if(stripos($row, "X-Requests-Remaining-Day:") === 0){
+                $this->remaining_day = (int) trim(substr($row, stripos($row, ":") + 1));
             }
         }
     }
